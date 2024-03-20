@@ -1,0 +1,253 @@
+{% extends 'index.html' %}
+
+{% block body %}
+
+<!-- Box container 1-->
+<div style="display: flex; justify-content: space-between; width: 80%; margin: auto;">
+  <!-- Bar Chart Container -->
+  <div id="barChartBox" style="width: 45%; height: 400px; border: 1px solid #ccc; border-radius: 10px; padding: 10px;">
+    <canvas id="barChart"></canvas>
+  </div>
+
+  <!-- Pie Chart Container -->
+  <div id="pieChartBox" style="width: 45%; height: 400px; border: 1px solid #ccc; border-radius: 10px; padding: 10px;">
+    <canvas id="pieChart"></canvas>
+  </div>
+</div>
+<!-- Box container 2 -->
+<div style="display: flex; justify-content: space-between; width: 80%; margin: auto;">
+  <!-- Pyramid Chart Container -->
+  <div id="chartContainer" style="width: 45%; height: 400px; border: 1px solid #ccc; border-radius: 10px; padding: 10px;">
+
+  </div>
+  <!-- multi line graph -->
+  <div id="multiLineBox" style="width: 45%; height: 400px; border: 1px solid #ccc; border-radius: 10px; padding: 10px;">
+    <canvas id="doubleLineChart"></canvas>
+  </div>
+</div>
+<!-- Bar Graph -->
+<script>
+  // Retrieve serialized data passed from Django view
+  var serializedData = JSON.parse('{{ serialized_data|escapejs }}');
+
+  // Create an object to store the sum of intensities and the count of entries for each sector
+  var sectorData = {};
+
+  // Iterate over the serialized data to calculate the sum of intensities and the count of entries for each sector
+  serializedData.forEach(entry => {
+    // Skip entries where sector or intensity is empty
+    if (entry.sector === "" || entry.intensity === "") {
+      return;
+    }
+    
+    // Update sectorData object
+    if (!sectorData.hasOwnProperty(entry.sector)) {
+      sectorData[entry.sector] = { sumIntensity: 0, count: 0 };
+    }
+    sectorData[entry.sector].sumIntensity += parseFloat(entry.intensity);
+    sectorData[entry.sector].count++;
+  });
+
+  // Calculate the average intensity for each sector
+  var averageIntensities = {};
+  for (var sector in sectorData) {
+    if (sectorData.hasOwnProperty(sector)) {
+      averageIntensities[sector] = sectorData[sector].sumIntensity / sectorData[sector].count;
+    }
+  }
+
+  // Extract sectors and average intensities
+  var sectors = Object.keys(averageIntensities);
+  var intensities = Object.values(averageIntensities);
+
+  // Define an array of colors for the bars
+  var colors = ['grey', 'green', 'brown', 'yellow', 'blue', 'pink'];
+
+  // Create an array to store backgroundColor for each bar
+  var backgroundColors = [];
+  for (var i = 0; i < sectors.length; i++) {
+    backgroundColors.push(colors[i % colors.length]);
+  }
+
+  // Create bar chart
+  var ctx1 = document.getElementById('barChart').getContext('2d');
+  var myChart = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels: sectors, 
+      datasets: [{
+        label: 'Average Intensity',
+        data: intensities, 
+        backgroundColor: backgroundColors, 
+        borderColor: 'rgba(54, 162, 235, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      scales: {
+        y: {
+          beginAtZero: true
+        }
+      }
+    }
+  });
+</script>
+<!-- Pie Chart -->
+<script>
+  // Extract country and relevance data
+  var countries = serializedData.map(entry => entry.country);
+  var uniqueCountries = Array.from(new Set(countries));
+
+  var aggregatedData = [];
+  uniqueCountries.forEach(country => {
+      if (country === "") {
+          return;
+      }
+      var entriesForCountry = serializedData.filter(entry => entry.country === country);
+      var relevanceSum = entriesForCountry.reduce((sum, entry) => sum + entry.relevance, 0);
+      var relevanceAverage = relevanceSum / entriesForCountry.length;
+
+      aggregatedData.push({ country: country, relevance: relevanceAverage });
+  });
+
+  // Sort aggregated data by relevance in descending order
+  aggregatedData.sort((a, b) => b.relevance - a.relevance);
+
+  // Take top 10 countries
+  var topCountries = aggregatedData.slice(0, 10);
+
+  // Extract top country relevance values and labels
+  var relevanceData = topCountries.map(entry => entry.relevance);
+  var countryLabels = topCountries.map(entry => entry.country);
+
+  var pieColors = [];
+  for (var i = 0; i < countryLabels.length; i++) {
+      var randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+      pieColors.push(randomColor);
+  }
+
+  // Create pie chart
+  var ctx2 = document.getElementById('pieChart').getContext('2d');
+  new Chart(ctx2, {
+    type: "doughnut",
+    data:{
+      labels: countryLabels,
+      datasets:[{
+        data: relevanceData,
+        backgroundColor: pieColors,
+      }]
+    },
+    options: {
+      plugins: {
+          title: {
+              display: true,
+              text: 'Average of Intensity for each Country'
+          }
+      }
+  }
+  });
+</script>
+<!-- Pyramid Chart -->
+<script>
+  window.onload = function () {
+    var serializedData = JSON.parse('{{ serialized_data|escapejs }}');
+    
+    // Filter out data points with an empty string as the topic
+    var filteredData = serializedData.filter(entry => entry.topic.trim() !== '');
+
+    // Create a data structure to hold the count of entries for each region and topic
+    var regionTopicCount = {};
+
+    // Count the number of entries for each combination of region and topic
+    filteredData.forEach(function(entry) {
+      var key = entry.region + ' - ' + entry.topic;
+      regionTopicCount[key] = (regionTopicCount[key] || 0) + 1;
+    });
+
+    // Extract unique regions and topics
+    var regions = [...new Set(filteredData.map(entry => entry.region))];
+    var topics = [...new Set(filteredData.map(entry => entry.topic))];
+
+    // Prepare data for the pyramid chart
+    var dataPoints = [];
+    regions.forEach(function(region) {
+      topics.forEach(function(topic) {
+        var count = regionTopicCount[region + ' - ' + topic] || 0;
+        dataPoints.push({ y: count, label: region + ' - ' + topic });
+      });
+    });
+
+    // Sort the data points based on count in descending order
+    dataPoints.sort(function(a, b) {
+      return b.y - a.y;
+    });
+
+    // Filter out the top 5 data points
+    var top5DataPoints = dataPoints.filter((value, index) => index < 5);
+
+    var chart = new CanvasJS.Chart("chartContainer", {
+        animationEnabled: true,
+        exportEnabled: true,
+        title:{
+            text: "Pyramid Chart for Regions & Topics",
+            fontSize: 16
+        },
+        data: [{
+            type: "pyramid",
+            indexLabelFontSize: 16,
+            valueRepresents: "area",
+            toolTipContent: "<b>{label}</b>: {y} Entries",
+            dataPoints: top5DataPoints
+        }]
+    });
+    chart.render();
+};
+</script>
+<!-- Multi-line graph -->
+<script>
+
+  var serializedData = JSON.parse('{{ serialized_data|escapejs }}');
+
+  // Filter out entries with non-empty values for intensity, relevance, and likelihood
+  var filteredData = serializedData.filter(entry => entry.intensity !== "" && entry.relevance !== "" && entry.likelihood !== "");
+
+  // Sort the data based on intensity, relevance, and likelihood and select top 10 entries
+  var sortedDataByIntensity = filteredData.slice().sort((a, b) => b.intensity - a.intensity).slice(0, 20);
+  var sortedDataByRelevance = filteredData.slice().sort((a, b) => b.relevance - a.relevance).slice(0, 20);
+  var sortedDataByLikelihood = filteredData.slice().sort((a, b) => b.likelihood - a.likelihood).slice(0, 20);
+
+  // Extract values for x-axis (labels)
+  const xValues = sortedDataByIntensity.map((entry, index) => index + 1);
+
+  new Chart("doubleLineChart", {
+    type: "line",
+    data: {
+      labels: xValues,
+      datasets: [
+        { 
+          label: "Intensity",
+          data: sortedDataByIntensity.map(entry => entry.intensity),
+          borderColor: "red",
+          fill: false
+        },
+        { 
+          label: "Relevance",
+          data: sortedDataByRelevance.map(entry => entry.relevance),
+          borderColor: "green",
+          fill: false
+        },
+        { 
+          label: "Likelihood",
+          data: sortedDataByLikelihood.map(entry => entry.likelihood),
+          borderColor: "blue",
+          fill: false
+        }
+      ]
+    },
+    options: {
+      legend: {display: true}
+    }
+  });
+</script>
+
+{% endblock %}
