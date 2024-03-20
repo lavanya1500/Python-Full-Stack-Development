@@ -8,4 +8,4 @@ The JSON file is read in a management->commands->import_json.py folder under the
 Django model is created for all the fields.
 Django views helps in the connectivity of the database, templates. Hence request is made to connect the database and the templates.
 The urls.py under the app folder calls the views.py, and the urls.py under the project folder calls the urls.py under the app folder.
-The template is the html body for the frontend, where data will be taken with the help of JS, and charts will be made according to the data.
+The template is the html body for the frontend, where data will be called with the help of JS, and charts will be made according to the data.
